@@ -20,7 +20,18 @@ CREATE TABLE IF NOT EXISTS readiness_patterns (
     UNIQUE(pattern_type, pattern_data)
 );
 
+CREATE TABLE IF NOT EXISTS readiness_insights (
+    id SERIAL PRIMARY KEY,
+    insight_type VARCHAR(50),
+    insight_text TEXT NOT NULL,
+    confidence DECIMAL(3,2),
+    supporting_data JSONB,
+    generated_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_readiness_created ON readiness_assessments(created_at);
 CREATE INDEX IF NOT EXISTS idx_readiness_industry ON readiness_assessments(industry);
 CREATE INDEX IF NOT EXISTS idx_readiness_score ON readiness_assessments(overall_score);
 CREATE INDEX IF NOT EXISTS idx_patterns_type ON readiness_patterns(pattern_type);
+CREATE INDEX IF NOT EXISTS idx_insights_type ON readiness_insights(insight_type);
+CREATE INDEX IF NOT EXISTS idx_insights_date ON readiness_insights(generated_at DESC);

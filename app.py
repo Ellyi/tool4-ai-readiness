@@ -5,19 +5,26 @@ from psycopg2.extras import RealDictCursor
 import os
 from datetime import datetime
 import json
+from cip_engine_readiness import CIPEngineReadiness
 
 app = Flask(__name__)
 CORS(app)
 
 # Database connection
 def get_db():
-    return psycopg2.connect(
-        host=os.getenv('DB_HOST'),
-        database=os.getenv('DB_NAME', 'railway'),
-        user=os.getenv('DB_USER', 'postgres'),
-        password=os.getenv('DB_PASSWORD'),
-        port=os.getenv('DB_PORT', 5432)
-    )
+    # Railway provides DATABASE_URL, parse it
+    database_url = os.getenv('DATABASE_URL')
+    if database_url:
+        return psycopg2.connect(database_url)
+    else:
+        # Fallback to individual env vars for local dev
+        return psycopg2.connect(
+            host=os.getenv('DB_HOST'),
+            database=os.getenv('DB_NAME', 'railway'),
+            user=os.getenv('DB_USER', 'postgres'),
+            password=os.getenv('DB_PASSWORD'),
+            port=os.getenv('DB_PORT', 5432)
+        )
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -150,6 +157,15 @@ def assess_readiness():
     conn.commit()
     cur.close()
     conn.close()
+    
+    # CIP: Log patterns for learning
+    cip = CIPEngineReadiness()
+    cip.log_patterns({
+        'industry': industry,
+        'overall_score': overall_score,
+        'category_scores': category_scores
+    })
+    cip.close()
     
     return jsonify({
         'assessment_id': assessment_id,
