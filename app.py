@@ -30,6 +30,13 @@ def get_db():
 def health():
     return jsonify({'status': 'healthy', 'service': 'tool4-ai-readiness'})
 
+@app.route('/debug', methods=['GET'])
+def debug():
+    return jsonify({
+        'DATABASE_URL': os.getenv('DATABASE_URL'),
+        'has_value': os.getenv('DATABASE_URL') is not None
+    })
+
 @app.route('/api/assess', methods=['POST'])
 def assess_readiness():
     """
