@@ -5,6 +5,7 @@ from psycopg2.extras import RealDictCursor
 import os
 from datetime import datetime
 import json
+import secrets
 from cip_engine_readiness import CIPEngineReadiness
 
 app = Flask(__name__)
@@ -137,6 +138,25 @@ def assess_readiness():
     
     assessment_id = cur.fetchone()['id']
     
+    # Generate session for Nuru handoff
+    session_id = secrets.token_urlsafe(32)
+    
+    user_context = {
+        'company_name': company_name,
+        'industry': industry,
+        'overall_score': overall_score,
+        'readiness_level': level,
+        'category_scores': category_scores,
+        'weak_areas': [cat for cat, score in weak_categories],
+        'next_steps': next_steps,
+        'assessment_completed_at': datetime.now().isoformat()
+    }
+    
+    cur.execute("""
+        INSERT INTO sessions (session_id, assessment_id, user_context)
+        VALUES (%s, %s, %s)
+    """, (session_id, assessment_id, json.dumps(user_context)))
+    
     # CIP: Log patterns
     if industry and overall_score:
         cur.execute("""
@@ -176,6 +196,7 @@ def assess_readiness():
     
     return jsonify({
         'assessment_id': assessment_id,
+        'session_id': session_id,
         'overall_score': overall_score,
         'category_scores': category_scores,
         'readiness_level': level,
@@ -262,6 +283,39 @@ def get_percentile(score):
         'percentile': percentile,
         'message': f"You're in the top {100 - percentile}% of businesses we've analyzed"
     })
+
+@app.route('/api/session/<session_id>', methods=['GET'])
+def get_session(session_id):
+    """API endpoint for Nuru to fetch assessment context"""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    cur.execute("""
+        SELECT user_context, assessment_id, created_at
+        FROM sessions
+        WHERE session_id = %s AND expires_at > NOW()
+    """, (session_id,))
+    
+    session = cur.fetchone()
+    
+    if not session:
+        cur.close()
+        conn.close()
+        return jsonify({'error': 'Session not found or expired'}), 404
+    
+    # Update access tracking
+    cur.execute("""
+        UPDATE sessions
+        SET accessed_count = accessed_count + 1,
+            last_accessed = NOW()
+        WHERE session_id = %s
+    """, (session_id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    return jsonify(session['user_context'])
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
